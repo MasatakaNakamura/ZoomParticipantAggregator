@@ -1,64 +1,62 @@
 import pandas as pd
 
 import os
+import pandas as pd
 import configparser
+import sys
 
 # グローバル変数としてconfigを定義
 config = None
 
 def read_properties(file_path):
+    """プロパティファイルを読み込み、ConfigParserオブジェクトを返す"""
     config = configparser.ConfigParser()
     config.read(file_path)
     return config
 
-def read_csv(file_path):
-    # CSVファイル全体を読み込む
+def read_meeting_info(file_path):
+    """CSVファイルからミーティング情報を読み込む"""
     meeting_info_df = pd.read_csv(file_path, encoding='utf-8', nrows=2)
-    
-    # ミーティング情報を取得
     meeting_info = meeting_info_df.iloc[0].to_dict()
-    
-    # 参加者情報を取得
+    return meeting_info
+
+def read_participants_info(file_path):
+    """CSVファイルから参加者情報を読み込む"""
     participant_df = pd.read_csv(file_path, encoding='utf-8', skiprows=3)
     participants_info = participant_df.iloc[4:].dropna(how='all').to_dict(orient='records')
-    
+    return participants_info
+
+def read_csv(file_path):
+    """CSVファイル全体を読み込み、ミーティング情報と参加者情報を返す"""
+    meeting_info = read_meeting_info(file_path)
+    participants_info = read_participants_info(file_path)
     return meeting_info, participants_info
 
-def analyze_participants(participants_info):
-
-    # 参加者の辞書を定義
-    participant_map = {}  
-
-    # 1項目目の値を取得
-    for participant in participants_info:
-
-        print(participant['名前 (元の名前)'])
-
-        # "_"で分割
-        participant_info = participant['名前 (元の名前)'].split("_") 
-
-        # 1項目目をキーにして件数をカウントアップ
-        if participant_info[0] in participant_map:
-            participant_map[participant_info[0]] += 1
-        else:
-            participant_map[participant_info[0]] = 1
-
-    # 集計結果をソートして返却
-    return dict(sorted(participant_map.items(), key=lambda x: x[0]))
-
 def modify_participant_names(participants_info):
-        # 表記の揺れている名前を統一するための辞書を定義
-        replace_name_dict = {
-            "‗": "_",
-            " ": "_",
-        }
+    """参加者情報の名前を統一する"""
+    replace_name_dict = {
+        "‗": "_",
+        " ": "_"
+    }
+    for participant in participants_info:
+        for key, value in replace_name_dict.items():
+            participant['名前 (元の名前)'] = participant['名前 (元の名前)'].replace(key, value)
+    return participants_info
 
-        # 参加者情報を修正
-        for participant in participants_info:
-            for key, value in replace_name_dict.items():
-                participant['名前 (元の名前)'] = participant['名前 (元の名前)'].replace(key, value)
+def analyze_participants(participants_info):
+    """参加者情報を集計する"""
+    participants = {}
+    for participant in participants_info:
+        participant_info = participant['名前 (元の名前)'].split("_")
+        if participant_info[0] in participants:
+            participants[participant_info[0]] += 1
+        else:
+            participants[participant_info[0]] = 1
 
-        return participants_info
+    # 部署名をキーにしてソート
+    participants = dict(sorted(participants.items(), key=lambda x: x[0]))
+    
+    return participants
 
 if __name__ == "__main__":
 
@@ -69,8 +67,16 @@ if __name__ == "__main__":
     config = read_properties(properties_file)
 
     # ファイルパスを指定
-    input_file = os.path.join('data', 'input', '202409_zoom_participants_.csv')
+    if len(sys.argv) > 1:
+        input_file = sys.argv[1]
+    else:
+        input_file = config.get('DEFAULT', 'csv_file_path')
 
+    # ファイルが存在するかチェック
+    if not os.path.exists(input_file):
+        print(f"エラー: 指定されたファイルが存在しません: {input_file}")
+        sys.exit(1)
+        
     # CSVファイルを読み込む
     meeting_info, participants_info = read_csv(input_file)
 
